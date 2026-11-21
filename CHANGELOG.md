@@ -7,3 +7,4 @@
 - `skill/scripts/render_rig.py`: rig-v1, 4 ortho views (az 45/135/225/315, el 30), Workbench studio light, 512 px, GT-derived frame.
 - `skill/scripts/score.py`: silhouette IoU per view, SSIM, LPIPS (AlexNet), chamfer (% of GT bbox diagonal), volume ratio (watertight only), crash = 0.
 - `skill/scripts/validate_scorer.py`: Milestone 1 exit test with a SEED=1 negative control.
+- Blender pinned to the official 5.0.1 binary (`BLENDER_BIN`), the dataset's target version; scipy + matplotlib installed into its bundled Python. The pip `bpy` 5.1.2 path is kept as a fallback.
