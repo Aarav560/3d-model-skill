@@ -6,4 +6,4 @@ Goals, in order: replicate dataset samples, replicate any real photo as a 3D mod
 
 Start here: `3D-SKILL-BUILD.md`. Claude Code reads `CLAUDE.md` automatically.
 
-Status: planning complete, no code yet. Next: Milestone 1.
+Status: Milestone 1 harness built; scorer validation partially met (13/20 GT programs reach IoU >= 0.98 on bpy 5.1.2). See `evals/m1_scorer_validation.md`.
