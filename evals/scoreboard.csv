@@ -1,3 +1,6 @@
 skill_version,blender_version,rig_version,split,category,n,iou_min_mean,pass_rate
 m1-harness,5.1.2,rig-v1,train(gt-code validation),factories_geo,20,0.8916,0.65
 m1-harness,5.0.1,rig-v1,train(gt-code validation),factories_geo,20,0.9510,0.75
+baseline-noskill,5.0.1,rig-v1,held_out,factories_geo,25,0.5942,0.00
+baseline-noskill,5.0.1,rig-v1,held_out,instances_geo,25,0.7505,0.00
+baseline-noskill,5.0.1,rig-v1,held_out,ALL,50,0.6724,0.00
