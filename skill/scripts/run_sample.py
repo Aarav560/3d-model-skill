@@ -20,6 +20,20 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 
+def blender_cmd(script: Path, args: list[str]) -> list[str]:
+    """Run `script args` inside the official Blender binary when BLENDER_BIN is set
+    (exact dataset version), else inside this venv's pip `bpy` module."""
+    blender = os.environ.get("BLENDER_BIN")
+    if blender:
+        return [blender, "-b", "--factory-startup", "--python-exit-code", "1",
+                "--python", str(script), "--", *args]
+    return [sys.executable, str(script), *args]
+
+
+def script_args() -> list[str]:
+    return sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
+
+
 def _empty_scene():
     import bpy
     bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -90,7 +104,7 @@ def run(mode: str, src: str, out: str, seed: int = 0, timeout: int = 900) -> dic
     env = dict(os.environ, SEED=str(seed))
     env.pop("HF_TOKEN", None)  # dataset/attempt code never sees the token
     src, out = str(Path(src).resolve()), str(Path(out).resolve())
-    cmd = [sys.executable, str(Path(__file__).resolve()), "--child", mode, src, out, "--seed", str(seed)]
+    cmd = blender_cmd(Path(__file__).resolve(), ["--child", mode, src, out, "--seed", str(seed)])
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
@@ -116,7 +130,7 @@ def main() -> None:
     ap.add_argument("out")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--timeout", type=int, default=900)
-    a = ap.parse_args()
+    a = ap.parse_args(script_args())
     if a.child:
         _child(a.mode, a.src, a.out, a.seed)
     else:

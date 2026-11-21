@@ -44,7 +44,7 @@ def pick_samples(n: int) -> list[str]:
 
 
 def render(mesh: Path, frame_mesh: Path, out: Path) -> bool:
-    p = subprocess.run([sys.executable, str(HERE / "render_rig.py"), str(mesh), str(frame_mesh), str(out)],
+    p = subprocess.run(run_sample.blender_cmd(HERE / "render_rig.py", [str(mesh), str(frame_mesh), str(out)]),
                        capture_output=True, text=True, timeout=900)
     return p.returncode == 0 and (out / "view_03.png").exists()
 
@@ -81,8 +81,9 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--n", type=int, default=20)
     ap.add_argument("--workers", type=int, default=3)
+    ap.add_argument("--tag", default="", help="suffix for the run dir, e.g. b501")
     a = ap.parse_args()
-    run_dir = ROOT / "runs" / "m1_validation"
+    run_dir = ROOT / "runs" / ("m1_validation" + (f"_{a.tag}" if a.tag else ""))
     ids = pick_samples(a.n)
     scorer._lpips_model()  # load once before threads start
     with ThreadPoolExecutor(a.workers) as ex:

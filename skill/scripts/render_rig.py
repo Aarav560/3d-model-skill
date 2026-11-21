@@ -101,5 +101,6 @@ def render(mesh_npz: str, frame: dict, out_dir: str) -> list[str]:
 
 
 if __name__ == "__main__":
-    mesh, frame_mesh, out = sys.argv[1:4]
+    args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else sys.argv[1:]
+    mesh, frame_mesh, out = args[:3]
     render(mesh, frame_of(frame_mesh), out)
