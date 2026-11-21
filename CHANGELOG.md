@@ -1,0 +1,9 @@
+# Changelog
+
+## m1-harness (Milestone 1)
+- venv (Python 3.13, `bpy==5.1.2`; PyPI has no 5.0 build), pinned in `requirements.txt`.
+- `skill/scripts/shard_manager.py`: one-shard download/extract/delete, SQLite manifest, exact 10% held-out split (salted hash rank, assigned on first touch).
+- `skill/scripts/run_sample.py`: isolated subprocess runner for Blender code or GLB import -> world-space triangle mesh (.npz).
+- `skill/scripts/render_rig.py`: rig-v1, 4 ortho views (az 45/135/225/315, el 30), Workbench studio light, 512 px, GT-derived frame.
+- `skill/scripts/score.py`: silhouette IoU per view, SSIM, LPIPS (AlexNet), chamfer (% of GT bbox diagonal), volume ratio (watertight only), crash = 0.
+- `skill/scripts/validate_scorer.py`: Milestone 1 exit test with a SEED=1 negative control.

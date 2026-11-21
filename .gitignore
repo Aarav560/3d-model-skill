@@ -1,7 +1,14 @@
+# secrets
 .env
+# local environment
 .venv/
-data/
-runs/
 __pycache__/
 *.blend1
+# dataset-derived (CC BY-NC-SA 4.0): never commit
+data/
+runs/
 *.tar
+*.glb
+*.npz
+evals/manifest.sqlite
+skill/references/patterns.md
