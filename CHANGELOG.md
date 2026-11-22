@@ -15,3 +15,8 @@
 - `skill/scripts/calibrate_ref_camera.py`: experimental reference-camera fit (background masks proved unreliable; not used for scoring).
 - `skill/references/frame_convention.md`: dataset frame / reference camera convention, measured on train samples.
 - Baseline on 50 held-out samples: mean aligned IoU-min 0.672, 0/50 pass (see `evals/m2_baseline.md`).
+
+## loop-v1 (Milestone 3)
+- `skill/scripts/preview.py`: attempter-side preview (attempt vs reference from the inferred reference cameras; no GT).
+- `skill/scripts/loop.py`: loop driver (seeds round 1 from baseline, rounds, stop rules incl. logged `no_hypothesis`, retrieval hook, per-sample state).
+- Held-out result on the fixed 50: mean aligned IoU-min 0.672 -> 0.735 (best round), 0.715 (last round); 3/50 pass. See `evals/m3_loop_v1.md`.

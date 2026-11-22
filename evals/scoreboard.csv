@@ -4,3 +4,6 @@ m1-harness,5.0.1,rig-v1,train(gt-code validation),factories_geo,20,0.9510,0.75
 baseline-noskill,5.0.1,rig-v1,held_out,factories_geo,25,0.5942,0.00
 baseline-noskill,5.0.1,rig-v1,held_out,instances_geo,25,0.7505,0.00
 baseline-noskill,5.0.1,rig-v1,held_out,ALL,50,0.6724,0.00
+loop-v1,5.0.1,rig-v1,held_out,factories_geo,25,0.6858,0.00
+loop-v1,5.0.1,rig-v1,held_out,instances_geo,25,0.7849,0.12
+loop-v1,5.0.1,rig-v1,held_out,ALL,50,0.7354,0.06

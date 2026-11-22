@@ -6,4 +6,4 @@ Goals, in order: replicate dataset samples, replicate any real photo as a 3D mod
 
 Start here: `3D-SKILL-BUILD.md`. Claude Code reads `CLAUDE.md` automatically.
 
-Status: Milestones 1-2 done. Baseline (no skill) on 50 held-out samples: mean aligned IoU 0.672, 0/50 pass. See `evals/m2_baseline.md`. Next: Milestone 3 (loop v1).
+Status: Milestones 1-3 done. Loop v1 beats the baseline on the fixed 50 held-out samples: mean aligned IoU 0.672 -> 0.735, 3/50 pass. See `evals/m3_loop_v1.md`. Next: Milestone 4 (pattern library).
