@@ -58,7 +58,7 @@ def text_page(pdf, title, lines):
 def character(out):
     D = ROOT / "runs" / "custom" / "suspenders_guy"
     versions = [("v1 parametric (r1)", D / "r1", "beauty.png"), ("v1 parametric (final)", D / "final", "beauty.png"),
-                ("v2 photo-fit", D / "v2", "front.png")]
+                ("v2 photo-fit", D / "v2", "front.png"), ("v3 photo-fit full-res", D / "v3", "front.png")]
     metrics = {name: json.loads((d / "compare.json").read_text()) for name, d, _ in versions if (d / "compare.json").exists()}
     with PdfPages(out) as pdf:
         lines = ["Reference: single front 3/4 image of a stylized character (third-party art, kept private).", "",
@@ -70,7 +70,7 @@ def character(out):
         lines += ["", "IoU = silhouette overlap with the reference (1.0 = identical outline).",
                   "SSIM higher = more similar; LPIPS lower = more similar (perceptual); colErr = mean |RGB diff| in the silhouette.", "",
                   "v1: primitives + skin-modifier volumes, flat procedural colours, built only from measured proportions.",
-                  "v2: geometry inflated from the reference silhouette (round cross-sections), colours projected from",
+                  "v2/v3: geometry inflated from the reference silhouette (round cross-sections), colours projected from",
                   "    the photo through the front camera. The front view therefore matches closely BY CONSTRUCTION;",
                   "    back and sides are inferred (front texture smears across the sides).",
                   "Neither version is a sculpted replica: no edge flow, no real back view, no cloth simulation."]
@@ -78,7 +78,7 @@ def character(out):
         fig, axs = plt.subplots(2, 2, figsize=A4)
         show(axs[0, 0], img(D / "reference.jpg"), "reference")
         show(axs[0, 1], img(D / "final" / "beauty.png"), f"v1 final  IoU {metrics.get('v1 parametric (final)', {}).get('iou_aligned', 0):.3f}")
-        show(axs[1, 0], img(D / "v2" / "front.png"), f"v2 photo-fit  IoU {metrics.get('v2 photo-fit', {}).get('iou_aligned', 0):.3f}")
+        show(axs[1, 0], img(D / "v3" / "front.png"), f"v3 photo-fit  IoU {metrics.get('v3 photo-fit full-res', {}).get('iou_aligned', 0):.3f}")
         show(axs[1, 1], img(D / "ref_mask_clean.png"), "reference silhouette (mask used for scoring)")
         fig.suptitle("Front view: reference vs models", fontsize=12)
         pdf.savefig(fig); plt.close(fig)
@@ -86,14 +86,14 @@ def character(out):
         for ax, (n, d, _) in zip(axs, versions):
             show(ax, img(d / "compare.jpg"), f"{n}: reference | model | overlay (white both, green ref only, red model only)")
         pdf.savefig(fig); plt.close(fig)
-        rounds = [(f"r{i}", D / f"r{i}") for i in range(1, 6)] + [("final", D / "final"), ("v2", D / "v2")]
+        rounds = [(f"r{i}", D / f"r{i}") for i in range(1, 6)] + [("final", D / "final"), ("v2", D / "v2"), ("v3", D / "v3")]
         vals = [(n, json.loads((d / "compare.json").read_text())["iou_aligned"]) for n, d in rounds if (d / "compare.json").exists()]
         fig, ax = plt.subplots(figsize=(8.27, 4))
         ax.plot([v[0] for v in vals], [v[1] for v in vals], "o-")
         ax.set_ylim(0, 1); ax.set_ylabel("silhouette IoU vs reference"); ax.grid(alpha=0.3)
         ax.set_title("Improvement log by round")
         pdf.savefig(fig); plt.close(fig)
-        for n, d in (("v1 parametric", D / "final"), ("v2 photo-fit", D / "v2")):
+        for n, d in (("v1 parametric", D / "final"), ("v2 photo-fit", D / "v2"), ("v3 photo-fit full-res", D / "v3")):
             turns = sorted(d.glob("turn_*.png"))
             if turns:
                 fig, axs = plt.subplots(1, len(turns), figsize=(11.69, 4))

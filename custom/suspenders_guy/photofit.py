@@ -19,8 +19,8 @@ import bpy
 import numpy as np
 
 HEIGHT_M = 1.85          # assumed real height (scale only)
-STEP = 2                 # pixel stride of the grid
-DEPTH_SCALE = 0.8        # flatten the inflation slightly (bodies are deeper than wide only at the chest)
+STEP = 1                 # pixel stride of the grid (1 = every pixel: exact outline)
+DEPTH_SCALE = 1.0        # fully round cross-sections (depth = local radius)
 LOCAL_R_PX = 21          # neighbourhood used to estimate the local part radius
 
 
@@ -74,8 +74,7 @@ def build(mask, h, ref_path):
     bpy.context.scene.collection.objects.link(ob)
     for p in me.polygons:
         p.use_smooth = True
-    sm = ob.modifiers.new("smooth", "CORRECTIVE_SMOOTH")
-    sm.iterations = 4
+    # no smoothing modifier: it shrinks the silhouette edge (cost ~1-2 IoU points at STEP=2)
     mat = bpy.data.materials.new("photo")
     mat.use_nodes = True
     nt = mat.node_tree
@@ -83,11 +82,11 @@ def build(mask, h, ref_path):
     tex.image = bpy.data.images.load(ref_path)
     tex.interpolation = "Cubic"
     bsdf = nt.nodes["Principled BSDF"]
-    nt.links.new(tex.outputs["Color"], bsdf.inputs["Base Color"])
-    bsdf.inputs["Roughness"].default_value = 0.7
-    # the photo already contains its lighting: add it as emission so the front view reproduces it
-    nt.links.new(tex.outputs["Color"], bsdf.inputs["Emission Color"])
-    bsdf.inputs["Emission Strength"].default_value = 0.85
+    # the photo already contains its lighting: shade with emission only (no double lighting)
+    emit = nt.nodes.new("ShaderNodeEmission")
+    nt.links.new(tex.outputs["Color"], emit.inputs["Color"])
+    emit.inputs["Strength"].default_value = 1.0
+    nt.links.new(emit.outputs["Emission"], nt.nodes["Material Output"].inputs["Surface"])
     me.materials.append(mat)
     return ob, s, (bot - top) * s
 
