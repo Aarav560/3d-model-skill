@@ -36,7 +36,21 @@ def iou(a, b):
     return float((a & b).sum() / u) if u else 1.0
 
 
-def main(ref_p, mask_p, rd):
+def appearance(ref, img, mask):
+    """SSIM (grey, whole frame), LPIPS (whole frame) and mean colour error inside the reference silhouette."""
+    import sys
+    from pathlib import Path
+    from skimage.metrics import structural_similarity as ssim
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "skill" / "scripts"))
+    import score as scorer
+    out = {"ssim": round(float(ssim(ref.mean(2), img.mean(2), data_range=255)), 4),
+           "lpips": round(scorer._lpips(ref[..., ::-1].copy(), img[..., ::-1].copy()), 4)}
+    diff = np.abs(ref.astype(np.float32) - img.astype(np.float32)).mean(2)
+    out["color_err_in_mask"] = round(float(diff[mask].mean() / 255), 4)
+    return out
+
+
+def main(ref_p, mask_p, rd, beauty_name="beauty.png"):
     ref = cv2.imread(ref_p)
     rm = cv2.imread(mask_p, cv2.IMREAD_GRAYSCALE) > 127
     sil = cv2.imread(f"{rd}/silhouette.png", cv2.IMREAD_UNCHANGED)[..., 3] > 127
@@ -53,11 +67,12 @@ def main(ref_p, mask_p, rd):
     ov[rm & ~al] = (0, 200, 0)
     ov[al & ~rm] = (0, 0, 220)
     ov[al & rm] = (230, 230, 230)
-    beauty = cv2.resize(cv2.imread(f"{rd}/beauty.png"), rm.shape[::-1])
+    beauty = cv2.resize(cv2.imread(f"{rd}/{beauty_name}"), rm.shape[::-1])
+    res.update(appearance(ref, beauty, rm))
     cv2.imwrite(f"{rd}/compare.jpg", np.hstack([ref, beauty, ov]), [cv2.IMWRITE_JPEG_QUALITY, 88])
     (__import__("pathlib").Path(rd) / "compare.json").write_text(json.dumps(res))
     print(json.dumps(res))
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:4])
+    main(*sys.argv[1:5])
