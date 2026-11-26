@@ -20,6 +20,7 @@ import numpy as np
 
 HEIGHT_M = 1.85          # assumed real height (scale only)
 STEP = 1                 # pixel stride of the grid (1 = every pixel: exact outline)
+MIN_THICK_PX = 0.0       # set > 0 by --v4 (minimum half-thickness, pixels)
 DEPTH_SCALE = 1.0        # fully round cross-sections (depth = local radius)
 LOCAL_R_PX = 21          # neighbourhood used to estimate the local part radius
 
@@ -53,7 +54,10 @@ def build(mask, h, ref_path):
         for y in range(0, H, STEP):
             for x in range(0, W, STEP):
                 if mask[y, x]:
-                    depth = h[y, x] if h[y, x] > 0.75 else 0.0       # sheets meet at the edge
+                    if MIN_THICK_PX > 0:   # v4: keep a solid core so voxel remesh sees a closed volume
+                        depth = max(h[y, x], MIN_THICK_PX)
+                    else:
+                        depth = h[y, x] if h[y, x] > 0.75 else 0.0   # sheets meet at the edge
                     idx[(side, y, x)] = bm.verts.new(((x - cx) * s, sign * depth * s, (bot - y) * s))
     bm.verts.ensure_lookup_table()
     for side in ("front", "back"):
@@ -89,6 +93,63 @@ def build(mask, h, ref_path):
     nt.links.new(emit.outputs["Emission"], nt.nodes["Material Output"].inputs["Surface"])
     me.materials.append(mat)
     return ob, s, (bot - top) * s
+
+
+def upgrade_v4(ob, ref_path, mask_shape, s, bot_px, cx_px, out):  # EXPERIMENTAL, FAILED (2026-11-26): remesh of the open relief tears holes (IoU 0.969 -> 0.72). Kept for reference; v3 is the delivered version.
+    """v4: voxel-remesh into one clean watertight surface (no pixel stair-steps, no front/back seam), re-project UVs
+    from the front camera, and blend materials by surface direction: front/back-facing -> sharp photo,
+    side-facing -> blurred photo colours (instead of single pixels smeared across the sides)."""
+    from scipy import ndimage
+    H, W = mask_shape
+    bpy.context.view_layer.objects.active = ob
+    ob.select_set(True)
+    ob.data.remesh_voxel_size = 0.0035
+    ob.data.remesh_voxel_adaptivity = 0.0
+    bpy.ops.object.voxel_remesh()
+    me = ob.data
+    uv = me.uv_layers.new(name="front_proj")
+    for loop in me.loops:
+        co = me.vertices[loop.vertex_index].co
+        uv.data[loop.index].uv = ((co.x / s + cx_px) / W, 1 - (bot_px - co.z / s) / H)
+    for p in me.polygons:
+        p.use_smooth = True
+    src_img = bpy.data.images.load(ref_path)
+    iw, ih = src_img.size
+    px = np.array(src_img.pixels[:], dtype=np.float32).reshape(ih, iw, src_img.channels)
+    for c in range(3):
+        px[..., c] = ndimage.gaussian_filter(px[..., c], 9)
+    bp = str(Path(out) / "ref_blur.png")
+    blur_img = bpy.data.images.new("ref_blur", iw, ih, alpha=src_img.channels == 4)
+    blur_img.pixels = px.ravel() if src_img.channels == 4 else np.dstack([px[..., :3], np.ones((ih, iw), np.float32)]).ravel()
+    blur_img.filepath_raw = bp
+    blur_img.file_format = "PNG"
+    blur_img.save()
+    mat = me.materials[0]
+    nt = mat.node_tree
+    for n in list(nt.nodes):
+        if n.type not in {"OUTPUT_MATERIAL"}:
+            nt.nodes.remove(n)
+    sharp = nt.nodes.new("ShaderNodeTexImage"); sharp.image = bpy.data.images.load(ref_path)
+    soft = nt.nodes.new("ShaderNodeTexImage"); soft.image = bpy.data.images.load(bp)
+    uvn = nt.nodes.new("ShaderNodeUVMap"); uvn.uv_map = "front_proj"
+    for t in (sharp, soft):
+        nt.links.new(uvn.outputs["UV"], t.inputs["Vector"])
+    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    sep = nt.nodes.new("ShaderNodeSeparateXYZ")
+    nt.links.new(geo.outputs["Normal"], sep.inputs["Vector"])
+    ab = nt.nodes.new("ShaderNodeMath"); ab.operation = "ABSOLUTE"
+    nt.links.new(sep.outputs["Y"], ab.inputs[0])
+    ramp = nt.nodes.new("ShaderNodeMapRange")          # |n.y| 0.35..0.75 -> 0..1 (side -> facing)
+    ramp.inputs["From Min"].default_value, ramp.inputs["From Max"].default_value = 0.35, 0.75
+    nt.links.new(ab.outputs[0], ramp.inputs["Value"])
+    mix = nt.nodes.new("ShaderNodeMix"); mix.data_type = "RGBA"
+    nt.links.new(ramp.outputs["Result"], mix.inputs["Factor"])
+    nt.links.new(soft.outputs["Color"], mix.inputs[6])
+    nt.links.new(sharp.outputs["Color"], mix.inputs[7])
+    emit = nt.nodes.new("ShaderNodeEmission")
+    nt.links.new(mix.outputs[2], emit.inputs["Color"])
+    nt.links.new(emit.outputs["Emission"], nt.nodes["Material Output"].inputs["Surface"])
+    return ob
 
 
 def scene(out, H, W, s, total_h, final):
@@ -159,9 +220,14 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     bpy.ops.wm.read_factory_settings(use_empty=True)
     mask = load_mask(str(Path(mask_p).resolve()))
+    global MIN_THICK_PX
+    if "--v4" in args:
+        MIN_THICK_PX = 2.0
     _, h = distance_and_radius(mask)
     ob, s, total_h = build(mask, h, str(Path(ref).resolve()))
     ys, xs = np.nonzero(mask)
+    if "--v4" in args:
+        upgrade_v4(ob, str(Path(ref).resolve()), mask.shape, s, ys.max(), (xs.min() + xs.max()) / 2, out)
     cam = scene(out, *mask.shape, s, total_h, final)
     render_views(out, cam, mask.shape, s, ys.max(), (xs.min() + xs.max()) / 2, final)
     bpy.ops.wm.save_as_mainfile(filepath=str(out / "model.blend"))
