@@ -224,12 +224,54 @@ def recon_report(out, results_jsonl):
 
 
 
+
+def batch_report(out):
+    """Full-dataset run: distribution, per-category means, gallery of reconstructions (attempt renders only)."""
+    rows = list(csv.DictReader(open(ROOT / "evals" / "scores_recon-learned-v1_instances_geo.csv")))
+    cats = list(csv.DictReader(open(ROOT / "evals" / "recon_categories_instances_geo.csv")))
+    v = {sp: [float(r["iou_min"] or 0) for r in rows if r["split"] == sp] for sp in ("held_out", "train")}
+    with PdfPages(out) as pdf:
+        lines = [f"Automatic reconstruction of every instances_geo sample ({len(rows)} objects, 8 shards, cloud CPU).",
+                 "Method: 4 reference images -> calibrated visual hull -> learned voxel pruning (trained on 120 train samples)",
+                 "-> silhouette-consistent put-back -> mesh. Score: aligned silhouette IoU, worst of 4 views on the scoring rig.", ""]
+        for sp, vals in v.items():
+            lines.append(f"{sp:9s} n={len(vals):5d} mean {np.mean(vals):.3f} median {np.median(vals):.3f} "
+                         f">=0.9 {sum(x >= 0.9 for x in vals)} ({100 * np.mean([x >= 0.9 for x in vals]):.1f}%) >=0.96 {sum(x >= 0.96 for x in vals)}")
+        lines += ["", "Held-out is the honest number (never used for training or tuning).",
+                  "Target 0.9 for every object: NOT met. Thin structures (plants, chopsticks, seeds) score far lower;",
+                  "the 4 reference cameras form two opposite pairs, so the images constrain shape from only two directions."]
+        text_page(pdf, "Full dataset run: instances_geo", lines)
+        fig, ax = plt.subplots(figsize=(8.27, 4.5))
+        ax.hist([v["train"], v["held_out"]], bins=40, range=(0, 1), label=["train", "held-out"], stacked=True)
+        ax.axvline(0.9, color="k", ls="--", lw=0.8); ax.axvline(0.96, color="r", ls=":", lw=0.8)
+        ax.set_xlabel("aligned IoU (worst view)"); ax.set_ylabel("objects"); ax.legend(); ax.set_title("Score distribution")
+        fig.tight_layout(); pdf.savefig(fig); plt.close(fig)
+        for chunk in range(0, len(cats), 70):
+            part = cats[chunk:chunk + 70]
+            fig, ax = plt.subplots(figsize=(8.27, 11.69))
+            ax.barh([c["category"] for c in part][::-1], [float(c["mean_iou_min"]) for c in part][::-1])
+            ax.axvline(0.9, color="k", ls="--", lw=0.8); ax.set_xlim(0, 1); ax.tick_params(labelsize=6)
+            ax.set_title(f"Mean IoU per category ({chunk + 1}-{chunk + len(part)} of {len(cats)}, best first)")
+            fig.tight_layout(); pdf.savefig(fig); plt.close(fig)
+        ranked = sorted(rows, key=lambda r: -float(r["iou_min"] or 0))
+        for title, sel in (("Best reconstructions", ranked[:16]), ("Median reconstructions", ranked[len(ranked) // 2 - 8: len(ranked) // 2 + 8]),
+                           ("Worst reconstructions", ranked[-16:])):
+            fig, axs = plt.subplots(4, 4, figsize=A4)
+            for ax, r in zip(axs.ravel(), sel):
+                key = r["sample"].split("/")[-1]
+                show(ax, img(ROOT / "runs" / "recon" / f"{key}_batch" / "aligned_r" / "view_00.png"),
+                     f"{key[:22]}\nIoU {float(r['iou_min'] or 0):.3f} ({r['split']})")
+            fig.suptitle(title + " (my reconstruction, scoring-rig view 0)")
+            fig.tight_layout(); pdf.savefig(fig); plt.close(fig)
+
 if __name__ == "__main__":
     kind, out = sys.argv[1], sys.argv[2]
     if kind == "character":
         character(out)
     elif kind == "training":
         training(out)
+    elif kind == "batch":
+        batch_report(out)
     elif kind == "recon":
         recon_report(out, sys.argv[3])
     else:
