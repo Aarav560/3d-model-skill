@@ -162,10 +162,49 @@ def dataset(out, versions):
             fig.tight_layout(); pdf.savefig(fig); plt.close(fig)
 
 
+def training(out):
+    """Practice log: per train sample, reference | best attempt | GT (revealed) | diff, scores per round, lessons."""
+    log = [json.loads(l) for l in open(ROOT / "runs" / "training_log.jsonl")]
+    samples = list(dict.fromkeys(r["sample"] for r in log if r["event"] == "round"))
+    with PdfPages(out) as pdf:
+        lines = [f"Practice samples (TRAIN split only): {len(samples)}. Ground truth revealed only after the final round.", ""]
+        lines.append(f"{'sample':30s} {'rounds':>6s} {'first':>6s} {'best':>6s}")
+        for sid in samples:
+            sc = [r["iou_min"] or 0 for r in log if r["event"] == "round" and r["sample"] == sid]
+            lines.append(f"{sid.split('/')[-1].replace('Factory_geo', ''):30s} {len(sc):6d} {sc[0]:6.3f} {max(sc):6.3f}")
+        tags = {}
+        for r in log:
+            if r["event"] == "lesson":
+                tags[r["tag"]] = tags.get(r["tag"], 0) + 1
+        lines += ["", "Lesson tags: " + ", ".join(f"{k} x{v}" for k, v in sorted(tags.items())), "",
+                  "Pattern library status (train evidence only): 0 banked, 7 candidates, 1 cut after a failed held-out test.",
+                  "See skill/references/patterns.md (private)."]
+        text_page(pdf, "Training log (Milestone 4 practice)", lines)
+        for sid in samples:
+            k = sid.split("/")[-1]
+            att = ROOT / "runs" / "attempts" / k
+            fig = plt.figure(figsize=A4)
+            gs = fig.add_gridspec(3, 2, height_ratios=[1, 2.2, 0.9])
+            show(fig.add_subplot(gs[0, 0]), img(att / "input" / "sheet.jpg"), "reference inputs (4 views)")
+            br = max(att.glob("round_*"), key=lambda d: json.loads((d / "score.json").read_text())["aligned"].get("iou_min", 0))
+            show(fig.add_subplot(gs[0, 1]), img(br / "preview.jpg"), f"best attempt {br.name} (ref | mine per view)")
+            show(fig.add_subplot(gs[1, :]), img(att / "reveal.jpg"), "GT (revealed) | best attempt | diff (green GT only, red attempt only)")
+            sc = [f"r{r['round']}: {r['iou_min']:.3f}" for r in log if r["event"] == "round" and r["sample"] == sid]
+            ls = [f"[{r['tag']}] {r['text']}" for r in log if r["event"] == "lesson" and r["sample"] == sid]
+            import textwrap
+            body = "rounds: " + ", ".join(sc) + "\n" + "\n".join(textwrap.fill(x, 110) for x in ls)
+            ax = fig.add_subplot(gs[2, :]); ax.axis("off")
+            ax.text(0, 1, body, fontsize=7, va="top", family="monospace")
+            fig.suptitle(k, fontsize=11)
+            pdf.savefig(fig); plt.close(fig)
+
+
 if __name__ == "__main__":
     kind, out = sys.argv[1], sys.argv[2]
     if kind == "character":
         character(out)
+    elif kind == "training":
+        training(out)
     else:
         vs = sys.argv[sys.argv.index("--versions") + 1:] if "--versions" in sys.argv else ["baseline-noskill", "loop-v1"]
         dataset(out, vs)

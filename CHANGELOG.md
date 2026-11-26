@@ -20,3 +20,10 @@
 - `skill/scripts/preview.py`: attempter-side preview (attempt vs reference from the inferred reference cameras; no GT).
 - `skill/scripts/loop.py`: loop driver (seeds round 1 from baseline, rounds, stop rules incl. logged `no_hypothesis`, retrieval hook, per-sample state).
 - Held-out result on the fixed 50: mean aligned IoU-min 0.672 -> 0.735 (best round), 0.715 (last round); 3/50 pass. See `evals/m3_loop_v1.md`.
+
+## m4-training batch 1
+- `skill/scripts/train.py`: train-only practice driver (rounds, reveal after the final round, lesson log).
+- `skill/scripts/yaw_probe.py`: post-reveal orientation diagnostic (rejected the 90-deg camera-offset hypothesis).
+- `skill/scripts/make_report.py`: illustrated PDF reports (character, dataset benchmark, training log).
+- `custom/suspenders_guy/photofit.py`: character v2, silhouette inflation + projected photo colours (silhouette IoU 0.688 -> 0.946).
+- Batch 1: 10 train samples; 0 banked patterns so far (see `evals/m4_training_log.md`).
