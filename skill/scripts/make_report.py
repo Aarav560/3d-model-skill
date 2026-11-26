@@ -199,12 +199,39 @@ def training(out):
             pdf.savefig(fig); plt.close(fig)
 
 
+
+def recon_report(out, results_jsonl):
+    """Per-sample: reference view 0 | hull reconstruction (rig view 0) | GT revealed (rig view 0) | scores."""
+    rs = [json.loads(l) for l in open(results_jsonl)]
+    loop = load_scores("loop-v1")
+    with PdfPages(out) as pdf:
+        vals = [r["iou_min"] for r in rs]
+        lines = [f"Automatic multi-view reconstruction (visual hull + calibration priors), {len(rs)} held-out instances_geo samples.",
+                 f"mean IoU-min {np.mean(vals):.3f}, median {np.median(vals):.3f}, >= 0.96: {sum(v >= 0.96 for v in vals)}/{len(vals)}",
+                 "", "Columns: reference input (view 0) | reconstruction on the scoring rig | ground truth on the scoring rig."]
+        text_page(pdf, "Reconstruction report (recon-hull-v2)", lines)
+        for k in range(0, len(rs), 4):
+            fig, axs = plt.subplots(4, 3, figsize=A4)
+            for row, r in enumerate(rs[k:k + 4]):
+                key = r["sample"]
+                sid = next(i for i in loop if i.endswith(key)) if any(i.endswith(key) for i in loop) else key
+                lv = float(loop.get(sid, {}).get("iou_min") or 0)
+                show(axs[row, 0], img(ROOT / "runs" / "attempts" / key / "input" / "view_00.png"), f"{key}\nreference")
+                show(axs[row, 1], img(ROOT / "runs" / "recon" / f"{key}_hull" / "aligned_r" / "view_00.png"),
+                     f"hull IoU {r['iou_min']:.3f} (manual loop {lv:.3f})")
+                show(axs[row, 2], img(ROOT / "runs" / "sealed" / key / "gt_r" / "view_00.png"), "GT (revealed)")
+            fig.tight_layout(); pdf.savefig(fig); plt.close(fig)
+
+
+
 if __name__ == "__main__":
     kind, out = sys.argv[1], sys.argv[2]
     if kind == "character":
         character(out)
     elif kind == "training":
         training(out)
+    elif kind == "recon":
+        recon_report(out, sys.argv[3])
     else:
         vs = sys.argv[sys.argv.index("--versions") + 1:] if "--versions" in sys.argv else ["baseline-noskill", "loop-v1"]
         dataset(out, vs)
