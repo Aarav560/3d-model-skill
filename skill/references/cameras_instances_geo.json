@@ -27,5 +27,7 @@
   "Bottle_022_geo": 0.9278
  },
  "fitted_on": "train",
- "subset": "instances_geo"
+ "subset": "instances_geo",
+ "note": "lens as fitted; a +3.7% scale correction was tested on train validation and lowered the mean (0.792 -> 0.785 with symmetry), so it is not applied",
+ "scale_correction_tested": 1.0357
 }

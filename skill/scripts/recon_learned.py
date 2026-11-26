@@ -28,6 +28,7 @@ import recon  # noqa: E402
 
 RES = 128
 EXT = 0.505
+USE_SYMMETRY = False   # tested on train validation: 0.792 -> 0.785 (worse overall); kept off
 FEATS = ["d0", "d1", "d2", "d3", "s0", "s1", "s2", "s3", "dmean", "x", "y", "z", "r", "zrel", "rrel"]
 
 
@@ -55,6 +56,8 @@ def features(renders_dir, params):
         ui, vi = np.clip(np.round(u).astype(int), 0, W - 1), np.clip(np.round(v).astype(int), 0, W - 1)
         D[:, i] = sd[vi, ui] * px_world
     hull = D.min(1) > 0
+    if USE_SYMMETRY:
+        hull = symmetry_carve(hull.reshape(RES, RES, RES), P, params, renders_dir).ravel()
     # z-symmetric bbox prior (camera target = bbox centre): clip the unseen underside
     hz = P[hull, 2]
     if len(hz):
@@ -67,6 +70,66 @@ def features(renders_dir, params):
     rr = r / max(r.max(), 1e-6)
     F = np.column_stack([Dh, np.sort(Dh, 1), Dh.mean(1), Ph, r, zr, rr]).astype(np.float32)
     return F, idx, g
+
+
+def silhouette_consistent(prob, idx, P_all, params, renders_dir, thr):
+    """Keep voxels with prob >= thr, then put back, for every input-view pixel the kept set no longer covers,
+    the most probable hull voxel on that pixel's ray. The reconstruction can then never lose silhouette
+    area that the 4 input images show (the failure of plain thresholding on thin parts)."""
+    ms = recon.masks(renders_dir)
+    W = ms[0].shape[1]
+    keep = prob >= thr
+    P = P_all[idx]
+    for i in range(4):
+        u, v = recon.project(P, params, i, W)
+        pix = np.clip(np.round(v).astype(int), 0, W - 1) * W + np.clip(np.round(u).astype(int), 0, W - 1)
+        covered = np.zeros(W * W, bool)
+        covered[pix[keep]] = True
+        need = ~covered[pix]                      # voxels whose pixel is uncovered
+        if not need.any():
+            continue
+        cand = np.nonzero(need)[0]
+        order = cand[np.lexsort((-prob[cand], pix[cand]))]   # group by pixel, highest prob first
+        first = np.ones(len(order), bool)
+        first[1:] = pix[order][1:] != pix[order][:-1]
+        keep[order[first]] = True
+    return keep
+
+
+COVER_MIN = 0.985   # a symmetric candidate must still cover >= this fraction of every input mask (tuned on train)
+
+
+def coverage(vol_flat, P, params, ms, res=256):
+    """Fraction of each input mask covered by the projection of the kept voxels (inputs only)."""
+    cov = []
+    for i, m in enumerate(ms):
+        W = m.shape[1]
+        small = cv2.resize(m.astype(np.uint8), (res, res), interpolation=cv2.INTER_NEAREST) > 0
+        u, v = recon.project(P[vol_flat], params, i, W)
+        ui = np.clip((u * res / W).astype(int), 0, res - 1)
+        vi = np.clip((v * res / W).astype(int), 0, res - 1)
+        pr = np.zeros((res, res), np.uint8)
+        pr[vi, ui] = 1
+        pr = cv2.dilate(pr, np.ones((3, 3), np.uint8)) > 0
+        cov.append((pr & small).sum() / max(small.sum(), 1))
+    return min(cov)
+
+
+def symmetry_carve(hull3, P, params, renders_dir):
+    """With effectively 2 independent view directions, carving leaves a skewed overshoot. Most man-made and many
+    natural objects are mirror-symmetric about x=0 and/or y=0 (the camera target is the bbox centre). Intersect the
+    hull with its mirror images and keep the most-carved candidate that still covers every input silhouette."""
+    ms = recon.masks(renders_dir)
+    cands = [("none", hull3)]
+    mx, my = hull3 & hull3[::-1, :, :], hull3 & hull3[:, ::-1, :]
+    cands += [("x", mx), ("y", my), ("xy", mx & my)]
+    best = ("none", hull3)
+    base = coverage(hull3.ravel(), P, params, ms)
+    for name, c in cands[1:]:
+        if c.sum() < best[1].sum() and coverage(c.ravel(), P, params, ms) >= base - (1 - COVER_MIN):
+            best = (name, c)
+    symmetry_carve.last = best[0]
+    return best[1]
 
 
 def gt_occupancy(gt_npz, points):
@@ -122,7 +185,7 @@ def train(data, model_out):
           f"train acc {clf.score(d['X'], d['y']):.3f}; base rate {d['y'].mean():.3f}")
 
 
-def run(sid, model_path, tag="_learned", skill="recon-learned-v1", thr=0.5, smooth=1.0):
+def run(sid, model_path, tag="_learned", skill="recon-learned-v1", thr=0.5, smooth=1.0, consistent=True):
     import joblib  # loads only the model this project trains itself (runs/learned), never downloaded files
     import attempt
     import score as scorer
@@ -136,9 +199,15 @@ def run(sid, model_path, tag="_learned", skill="recon-learned-v1", thr=0.5, smoo
     F, idx, g = features(src, params)
     vol = np.zeros(RES ** 3, np.float32)
     if len(idx):
-        vol[idx] = joblib.load(model_path).predict_proba(F)[:, 1]
+        prob = joblib.load(model_path).predict_proba(F)[:, 1]
+        if consistent:
+            X, Y, Z = np.meshgrid(g, g, g, indexing="ij")
+            P_all = np.stack([X.ravel(), Y.ravel(), Z.ravel()], 1)
+            vol[idx] = silhouette_consistent(prob, idx, P_all, params, src, thr).astype(np.float32)
+        else:
+            vol[idx] = (prob >= thr).astype(np.float32)
     vol = vol.reshape(RES, RES, RES)
-    ok = recon.to_mesh(vol, g, att / "pred.npz", smooth, thr)
+    ok = recon.to_mesh(vol, g, att / "pred.npz", smooth, 0.5)
     sealed = ROOT / "runs" / "sealed" / key
     if not (sealed / "gt_r" / "view_03.png").exists():
         attempt.prepare(sid)
@@ -165,4 +234,6 @@ if __name__ == "__main__":
     elif cmd == "run":
         tag = a[a.index("--tag") + 1] if "--tag" in a else "_learned"
         skill = a[a.index("--skill") + 1] if "--skill" in a else "recon-learned-v1"
-        run(a[0], a[1], tag, skill)
+        thr = float(a[a.index("--thr") + 1]) if "--thr" in a else 0.5
+        cons = "--no-consistent" not in a
+        run(a[0], a[1], tag, skill, thr=thr, consistent=cons)
