@@ -1,0 +1,31 @@
+{
+ "params": {
+  "az0": 204.3591,
+  "az1": 294.6114,
+  "az2": 24.3825,
+  "az3": 114.7942,
+  "el": 28.0052,
+  "lens": 64.882,
+  "dist": 2.9162,
+  "dx": 0.0006,
+  "dy": 0.0001,
+  "dz": 0.0044
+ },
+ "mean_splat_iou": 0.9027,
+ "per_sample": {
+  "AgaveMonocot_003_geo": 0.7553,
+  "AquariumTank_049_geo": 0.95,
+  "Auger_055_geo": 0.8466,
+  "BasketBase_005_geo": 0.9598,
+  "BathroomSink_054_geo": 0.9643,
+  "BedFrame_031_geo": 0.8458,
+  "Bed_033_geo": 0.9484,
+  "Beetle_028_geo": 0.7647,
+  "Bird_033_geo": 0.9245,
+  "BlenderRock_027_geo": 0.9842,
+  "BookStack_046_geo": 0.9609,
+  "Bottle_022_geo": 0.9278
+ },
+ "fitted_on": "train",
+ "subset": "instances_geo"
+}
