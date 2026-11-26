@@ -95,24 +95,11 @@ def build(mask, h, ref_path):
     return ob, s, (bot - top) * s
 
 
-def upgrade_v4(ob, ref_path, mask_shape, s, bot_px, cx_px, out):  # EXPERIMENTAL, FAILED (2026-11-26): remesh of the open relief tears holes (IoU 0.969 -> 0.72). Kept for reference; v3 is the delivered version.
-    """v4: voxel-remesh into one clean watertight surface (no pixel stair-steps, no front/back seam), re-project UVs
-    from the front camera, and blend materials by surface direction: front/back-facing -> sharp photo,
-    side-facing -> blurred photo colours (instead of single pixels smeared across the sides)."""
+def material_blend(ob, ref_path, out, uv_name):
+    """Direction-blended photo material: front/back-facing surfaces show the sharp photo, side-facing surfaces a
+    blurred copy (body-part colours instead of single silhouette pixels smeared across the sides)."""
     from scipy import ndimage
-    H, W = mask_shape
-    bpy.context.view_layer.objects.active = ob
-    ob.select_set(True)
-    ob.data.remesh_voxel_size = 0.0035
-    ob.data.remesh_voxel_adaptivity = 0.0
-    bpy.ops.object.voxel_remesh()
     me = ob.data
-    uv = me.uv_layers.new(name="front_proj")
-    for loop in me.loops:
-        co = me.vertices[loop.vertex_index].co
-        uv.data[loop.index].uv = ((co.x / s + cx_px) / W, 1 - (bot_px - co.z / s) / H)
-    for p in me.polygons:
-        p.use_smooth = True
     src_img = bpy.data.images.load(ref_path)
     iw, ih = src_img.size
     px = np.array(src_img.pixels[:], dtype=np.float32).reshape(ih, iw, src_img.channels)
@@ -131,7 +118,7 @@ def upgrade_v4(ob, ref_path, mask_shape, s, bot_px, cx_px, out):  # EXPERIMENTAL
             nt.nodes.remove(n)
     sharp = nt.nodes.new("ShaderNodeTexImage"); sharp.image = bpy.data.images.load(ref_path)
     soft = nt.nodes.new("ShaderNodeTexImage"); soft.image = bpy.data.images.load(bp)
-    uvn = nt.nodes.new("ShaderNodeUVMap"); uvn.uv_map = "front_proj"
+    uvn = nt.nodes.new("ShaderNodeUVMap"); uvn.uv_map = uv_name
     for t in (sharp, soft):
         nt.links.new(uvn.outputs["UV"], t.inputs["Vector"])
     geo = nt.nodes.new("ShaderNodeNewGeometry")
@@ -149,6 +136,27 @@ def upgrade_v4(ob, ref_path, mask_shape, s, bot_px, cx_px, out):  # EXPERIMENTAL
     emit = nt.nodes.new("ShaderNodeEmission")
     nt.links.new(mix.outputs[2], emit.inputs["Color"])
     nt.links.new(emit.outputs["Emission"], nt.nodes["Material Output"].inputs["Surface"])
+
+
+def upgrade_v4(ob, ref_path, mask_shape, s, bot_px, cx_px, out):  # EXPERIMENTAL, FAILED (2026-11-26): remesh of the open relief tears holes (IoU 0.969 -> 0.72). Kept for reference; v3 is the delivered version.
+    """v4: voxel-remesh into one clean watertight surface (no pixel stair-steps, no front/back seam), re-project UVs
+    from the front camera, and blend materials by surface direction: front/back-facing -> sharp photo,
+    side-facing -> blurred photo colours (instead of single pixels smeared across the sides)."""
+    from scipy import ndimage
+    H, W = mask_shape
+    bpy.context.view_layer.objects.active = ob
+    ob.select_set(True)
+    ob.data.remesh_voxel_size = 0.0035
+    ob.data.remesh_voxel_adaptivity = 0.0
+    bpy.ops.object.voxel_remesh()
+    me = ob.data
+    uv = me.uv_layers.new(name="front_proj")
+    for loop in me.loops:
+        co = me.vertices[loop.vertex_index].co
+        uv.data[loop.index].uv = ((co.x / s + cx_px) / W, 1 - (bot_px - co.z / s) / H)
+    for p in me.polygons:
+        p.use_smooth = True
+    material_blend(ob, ref_path, out, "front_proj")
     return ob
 
 
@@ -226,6 +234,8 @@ def main():
     _, h = distance_and_radius(mask)
     ob, s, total_h = build(mask, h, str(Path(ref).resolve()))
     ys, xs = np.nonzero(mask)
+    if "--v5" in args:   # v3 geometry unchanged + direction-blended material
+        material_blend(ob, str(Path(ref).resolve()), out, "uv")
     if "--v4" in args:
         upgrade_v4(ob, str(Path(ref).resolve()), mask.shape, s, ys.max(), (xs.min() + xs.max()) / 2, out)
     cam = scene(out, *mask.shape, s, total_h, final)
