@@ -1,0 +1,9 @@
+# Python 3.13 venv. bpy is pinned to the Blender version the dataset targets.
+bpy==5.1.2
+numpy
+scipy
+trimesh
+opencv-python-headless
+scikit-image
+huggingface_hub
+pyarrow
